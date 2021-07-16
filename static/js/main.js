@@ -33,6 +33,8 @@ $(function () {
     show_pic();
     // 展示当前播放信息
     show_play_info();
+    // 数据分析
+    dense_data_analysis();
 
 });
 
@@ -57,13 +59,13 @@ function get_base_info() {
                     let video_name = $(this).find("option:selected").text();
                     if(video_name !== current_video)
                     {
+                        $('#show_img').attr("src", "images/cover.jpg");
                         play_vedio = false;
                         current_video = video_name;
                         max_id = -1;
                         img_id = 0;
                         play_rate = normal_rate;
-                        $('#show_img').attr("src", "images/cover.jpg");
-                        show_pic();
+                        update_play_info();
                     }
                     console.log(current_video);
                 }
@@ -102,10 +104,31 @@ function set_click_response() {
 
     $('#dense_analysis').blur().on("click",function () {
         dense_analysis = true;
-        dense_data_analysis();
     })
 
     $('.ai_feature').blur().on("click",function () {
+        var data=JSON.stringify({
+              id: img_id,//当前index
+              video: current_video,// 当前视频名称
+              // 需要的ai功能
+              req_face_detect:face_detect,
+              req_mask_reg:mask_reg,
+              req_age_reg: age_reg,
+              req_gender_reg: gender_reg,
+          });
+        $.ajax({
+            url: "/ensure_img_state/",
+            type: "POST",
+            cache:false,
+            data:data,
+            success: function (data) {
+                var json_data=JSON.parse(data);
+                max_id = json_data["max_id"];
+            },
+            error: function (data) {
+                alert("出现错误，请联系管理员！");
+            }
+        })
         show_cur_function();
     })
 
@@ -113,7 +136,7 @@ function set_click_response() {
     $('#play_video').blur().on("click",function () {
         play_vedio = true;
         play_rate = normal_rate;
-        show_pic();
+        update_play_info();
     });
 
     $('#play_stop').blur().on("click",function () {
@@ -177,11 +200,8 @@ function set_click_response() {
     })
 }
 
-// 展示播放内容
-function show_pic() {
-  if(play_vedio){
-      if(img_id > max_id){
-          var data=JSON.stringify({
+function update_play_info() {
+    var data=JSON.stringify({
           id: img_id,//当前index
           video: current_video,// 当前视频名称
           // 需要的ai功能
@@ -190,36 +210,33 @@ function show_pic() {
           req_age_reg: age_reg,
           req_gender_reg: gender_reg,
       });
-      $.ajax({
+    $.ajax({
         url: "/ensure_img_state/",
         type: "POST",
         cache:false,
         data:data,
         success: function (data) {
             var json_data=JSON.parse(data);
-            var ok = json_data["img_state"];
             max_id = json_data["max_id"];
-            // 如果后台图片已经生成
-            if(ok && play_vedio)
-            {
-                $('#show_img').attr("src", "predictions/"+ current_video+ "/" + (img_id).toString() + ".jpg");
-                img_id++;
-            }
-            setTimeout("show_pic()", play_rate);
         },
         error: function (data) {
             alert("出现错误，请联系管理员！");
         }
     })
+}
+
+// 展示播放内容
+function show_pic() {
+  if(play_vedio){
+      if(img_id > max_id){
+          update_play_info();
       }
       else {
           $('#show_img').attr("src", "predictions/"+ current_video+ "/" + (img_id).toString() + ".jpg");
           img_id++;
-          setTimeout("show_pic()", play_rate);
       }
-
   }
-
+  setTimeout("show_pic()", play_rate);
 }
 
 // 展示当前已启动的功能
@@ -270,19 +287,21 @@ function dense_data_analysis() {
             cache:false,
             success: function (data) {
                 var json_data = JSON.parse(data);
-                var mask_data = json_data["mask_data"];
-                var gender_data = json_data["gender_data"];
-                var age_data = json_data["age_data"];
-                draw_pie_chart(mask_data,"mask");
-                draw_pie_chart(gender_data,"gender");
-                draw_pie_chart(age_data,"age");
-                setTimeout("dense_data_analysis()", 200*play_rate);
+                if(json_data.hasOwnProperty("mask_data")){
+                    var mask_data = json_data["mask_data"];
+                    var gender_data = json_data["gender_data"];
+                    var age_data = json_data["age_data"];
+                    draw_pie_chart(mask_data,"mask");
+                    draw_pie_chart(gender_data,"gender");
+                    draw_pie_chart(age_data,"age");
+                }
             },
             error: function (data) {
                 alert("出现错误，请联系管理员！");
             }
         });
     }
+    setTimeout("dense_data_analysis()", 200*play_rate);
 }
 
 function draw_pie_chart(task_data,target) {
